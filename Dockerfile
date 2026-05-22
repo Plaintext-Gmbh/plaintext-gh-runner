@@ -19,4 +19,7 @@ RUN apt-get update \
         openssh-client \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-USER runner
+# USER bleibt root, weil das base entrypoint.sh als root starten muss
+# (config + token + chown) und via gosu intern auf den runner-User wechselt.
+# Setzen wir hier USER runner, scheitert entrypoint.sh mit
+# "RUN_AS_ROOT env var is set to true but the user has been overridden".
