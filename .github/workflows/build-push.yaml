@@ -19,6 +19,18 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            context: .
+            dockerfile: Dockerfile
+            tag-suffix: latest
+          - variant: twingate
+            context: twingate
+            dockerfile: twingate/Dockerfile
+            tag-suffix: twingate
     steps:
       - uses: actions/checkout@v6
 
@@ -32,14 +44,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
+      - name: Build and push (${{ matrix.variant }})
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/plaintext-gmbh/plaintext-gh-runner:latest
-            ghcr.io/plaintext-gmbh/plaintext-gh-runner:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ghcr.io/plaintext-gmbh/plaintext-gh-runner:${{ matrix.tag-suffix }}
+            ghcr.io/plaintext-gmbh/plaintext-gh-runner:${{ matrix.tag-suffix }}-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,scope=${{ matrix.variant }},mode=max

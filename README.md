@@ -1,16 +1,23 @@
 # plaintext-gh-runner
 
-Custom GitHub Actions Self-Hosted Runner Image.
+Custom GitHub Actions Self-Hosted Runner Images.
 
 Aufbauend auf [`myoung34/github-runner`](https://github.com/myoung34/docker-github-actions-runner)
 mit zusätzlichen Tools, die in den `plaintext-*` Pipelines benötigt werden
-und in dem schlanken Base-Image fehlen:
+und in dem schlanken Base-Image fehlen.
 
-- `maven` (Build & Test, Sonar Analysis)
-- `postgresql-client` (DB-Setup-Steps)
-- `jq` (JSON-Parsing in Shell-Skripten)
-- `rsync`
-- `openssh-client`
+## Zwei Varianten
+
+| Tag | Inhalt | Container-Anforderungen |
+|-----|--------|-------------------------|
+| `:latest` | + `maven`, `postgresql-client`, `jq`, `rsync`, `openssh-client` | Standard, keine extra Capabilities |
+| `:twingate` | obiges + `twingate` Client + Wrapper-Entrypoint | `cap_add: NET_ADMIN` + `devices: /dev/net/tun` + `TWINGATE_SERVICE_KEY` |
+
+### Twingate-Variante
+
+Startet beim Container-Boot den Twingate-Daemon bevor der Runner registriert wird.
+Service-Key wird via ENV `TWINGATE_SERVICE_KEY` erwartet (JSON-Content, nicht Datei-Pfad).
+Ohne den Key verhält sich der Container wie das `:latest` (skip Twingate-Setup).
 
 ## Usage
 
