@@ -4,8 +4,8 @@ USER root
 
 # Selbe Tools wie das default-Image (maven, psql, ...) plus Twingate.
 # Twingate-Install: APT-Repo + Binary. Postinst-Script versucht systemd,
-# das schlägt im Container fehl — wir ignorieren das und starten den
-# Daemon manuell aus dem entrypoint-Wrapper.
+# das schlägt im Container fehl — wir umgehen mit "|| true" und starten
+# den Daemon später manuell aus dem CMD-Wrapper.
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -22,7 +22,12 @@ RUN apt-get update \
         || true \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Custom entrypoint: Twingate Daemon hochfahren bevor der GH-Runner startet.
-COPY entrypoint-twingate.sh /entrypoint-twingate.sh
-RUN chmod +x /entrypoint-twingate.sh
-ENTRYPOINT ["/entrypoint-twingate.sh"]
+# CMD-Wrapper: läuft NACH dem base /entrypoint.sh (das die Runner-
+# Registration macht). Wir starten Twingate hier und chainen dann das
+# eigentliche Runner.Listener Kommando. So bleiben die config/registration
+# flows des base-Images intakt.
+COPY twingate-launch.sh /usr/local/bin/twingate-launch.sh
+RUN chmod +x /usr/local/bin/twingate-launch.sh
+
+# ENTRYPOINT bleibt unverändert (base: /entrypoint.sh — macht config etc.)
+CMD ["/usr/local/bin/twingate-launch.sh"]
