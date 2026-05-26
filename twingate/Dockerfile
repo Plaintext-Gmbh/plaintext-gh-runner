@@ -11,6 +11,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl ca-certificates gnupg \
         maven postgresql-client jq rsync openssh-client \
+        nodejs npm \
         iproute2 iptables \
     && install -d -m 0755 /etc/apt/keyrings \
     && curl -fsSL https://packages.twingate.com/apt/gpg.key \

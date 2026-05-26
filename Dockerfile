@@ -17,6 +17,8 @@ RUN apt-get update \
         jq \
         rsync \
         openssh-client \
+        nodejs \
+        npm \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # USER bleibt root, weil das base entrypoint.sh als root starten muss
