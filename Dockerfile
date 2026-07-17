@@ -17,6 +17,7 @@ RUN apt-get update \
         jq \
         rsync \
         openssh-client \
+        fontconfig fonts-dejavu-core \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
         | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
