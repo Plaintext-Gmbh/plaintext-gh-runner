@@ -33,7 +33,8 @@ ARG MAVEN_VERSION=3.9.11
 RUN curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
         | tar -xz -C /opt \
     && ln -sf "/opt/apache-maven-${MAVEN_VERSION}/bin/mvn" /usr/local/bin/mvn \
-    && mvn --version
+    && test -x "/opt/apache-maven-${MAVEN_VERSION}/bin/mvn"
+    # kein `mvn --version` hier: das Image hat kein Java (setup-java kommt erst im Job)
 
 # USER bleibt root, weil das base entrypoint.sh als root starten muss
 # (config + token + chown) und via gosu intern auf den runner-User wechselt.
