@@ -12,9 +12,44 @@
 # Container braucht:
 #   --cap-add NET_ADMIN
 #   --device /dev/net/tun:/dev/net/tun
+#
+# Karte 459 — warum hier eine Vorprüfung steht:
+#
+# Die Runner laufen mit `network_mode: host` und teilen sich damit den Netzwerk-Namespace des
+# NAS-Hosts. Der Host betreibt selbst einen Twingate-Client (Interface `sdwan0`, Routen im
+# Bereich 100.64/10). In DEMSELBEN Namespace kann kein zweiter Client einen eigenen Tunnel
+# aufbauen: `twingate start` meldet zwar "Twingate has been started" und liefert Exit 0, der
+# Daemon beendet sich aber sofort — `twingate status` bleibt auf `not-running`.
+#
+# Sichtbar war das als 2645 von 2645 Startversuchen mit "tunnel not online after 30s" und
+# keiner einzigen Erfolgsmeldung in 30 Tagen. Gekostet hat es je Containerstart 30 s Wartezeit
+# und ein weiteres `service_key.json.<ts>.backup` in /etc/twingate.
+#
+# Gebraucht wurde der Container-Client dabei nie: Über den geteilten Namespace benutzen die
+# Jobs den Host-Tunnel bereits mit (im laufenden Runner nachgemessen:
+# `ip route get 100.96.0.1` -> `dev sdwan0 src 100.96.0.2`).
+#
+# Ohne Host-Netz funktioniert derselbe Client übrigens einwandfrei — im isolierten Container
+# mit denselben Rechten und demselben Key war der Tunnel nach 5 s `online`. Deshalb wird der
+# Weg unten nicht entfernt, sondern nur übersprungen, wenn er nachweislich überflüssig ist.
 set -e
 
-if [ -n "${TWINGATE_SERVICE_KEY:-}" ]; then
+# Ist im aktuellen Namespace schon ein Twingate-Tunnel aktiv? Twingate vergibt Adressen und
+# Routen aus dem CGNAT-Bereich 100.64.0.0/10; das Interface heisst je nach Plattform sdwan0
+# oder tun0. `ip` liegt im Twingate-Image vor (iproute2, siehe Dockerfile).
+twingate_tunnel_im_namespace() {
+  ip route show 2>/dev/null \
+    | grep -qE 'dev (sdwan|tun)[0-9]+' \
+    && return 0
+  return 1
+}
+
+if twingate_tunnel_im_namespace; then
+  # Der Normalfall auf dem NAS. Kein Fehler, keine Wartezeit, keine WARN.
+  echo "[twingate-launch] Twingate-Tunnel im Namespace bereits aktiv (Host-Client) — Container-Client wird uebersprungen"
+  ip route show 2>/dev/null | grep -E 'dev (sdwan|tun)[0-9]+' | head -3 | sed 's/^/[twingate-launch]   /'
+
+elif [ -n "${TWINGATE_SERVICE_KEY:-}" ]; then
   echo "[twingate-launch] setting up Twingate..."
   KEY_FILE=$(mktemp /tmp/twingate-key.XXXXXX.json)
   echo "$TWINGATE_SERVICE_KEY" > "$KEY_FILE"
@@ -36,9 +71,16 @@ if [ -n "${TWINGATE_SERVICE_KEY:-}" ]; then
     sleep 1
   done
 
+  # Karte 459, Punkt 3: Hier wurde bisher nur eine WARN geschrieben und der Runner trotzdem
+  # gestartet. Ein Runner ohne Tunnel nimmt Jobs an, die den Tunnel brauchen — die scheitern
+  # dann irgendwo an einem Timeout oder "connection refused", und niemand bringt das mit
+  # Twingate in Verbindung. Lieber gar nicht erst starten: der Job bleibt in der Queue und
+  # wartet auf einen Runner, der ihn wirklich ausführen kann.
   if ! twingate status 2>/dev/null | grep -q -i online; then
-    echo "[twingate-launch] WARN: tunnel not online after ${TIMEOUT}s"
-    twingate status 2>&1 | head -5 || true
+    echo "[twingate-launch] ERROR: Tunnel nach ${TIMEOUT}s nicht online — Runner wird NICHT gestartet." >&2
+    echo "[twingate-launch] ERROR: Ein Runner ohne Tunnel nimmt Jobs an, die er nicht ausfuehren kann." >&2
+    twingate status 2>&1 | head -5 | sed 's/^/[twingate-launch]   /' >&2 || true
+    exit 1
   fi
 
   # KEY_FILE bewusst nicht gelöscht — Twingate-Daemon liest evtl. nochmal nach.
