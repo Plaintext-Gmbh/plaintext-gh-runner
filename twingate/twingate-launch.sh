@@ -52,6 +52,11 @@ if twingate_tunnel_im_namespace; then
 elif [ -n "${TWINGATE_SERVICE_KEY:-}" ]; then
   echo "[twingate-launch] setting up Twingate..."
   KEY_FILE=$(mktemp /tmp/twingate-key.XXXXXX.json)
+  # Karte 765: Der Key muss auch dann verschwinden, wenn dieser Zweig unterwegs abbricht
+  # (`set -e`, oder der ERROR-Ausstieg unten). Ohne den trap blieb je Fehlversuch eine Kopie
+  # liegen — auf dem NAS 3692 Stueck aus drei Monaten, alle mit demselben, bis 05/2027
+  # gueltigen private_key, in einem /tmp das alle vier Runner teilen.
+  trap 'rm -f "$KEY_FILE"' EXIT INT TERM
   echo "$TWINGATE_SERVICE_KEY" > "$KEY_FILE"
   chmod 600 "$KEY_FILE"
 
@@ -83,7 +88,12 @@ elif [ -n "${TWINGATE_SERVICE_KEY:-}" ]; then
     exit 1
   fi
 
-  # KEY_FILE bewusst nicht gelöscht — Twingate-Daemon liest evtl. nochmal nach.
+  # Ab hier laeuft der Tunnel — der Key ist von `twingate setup` laengst nach /etc/twingate
+  # uebernommen (dass setup dort schreibt, war in Karte 459 an den service_key.json.<ts>.backup
+  # zu sehen, die jeder Fehlversuch hinterliess). Die tmp-Kopie wird nicht mehr gebraucht und
+  # geht weg, bevor unten `exec` den trap gegenstandslos macht.
+  rm -f "$KEY_FILE"
+  trap - EXIT INT TERM
 else
   echo "[twingate-launch] TWINGATE_SERVICE_KEY not set — skipping Twingate"
 fi
